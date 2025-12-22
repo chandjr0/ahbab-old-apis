@@ -1,0 +1,2 @@
+SMS: api/src/service/smsList.js ei jaygay name chnage hobe.
+aamarPay: /Users/home/Movies/study/stx/storex-affiliate/api/src/config/aamarPay.js update korte hobe

@@ -1,0 +1,15 @@
+const Axios = require("axios");
+
+const url = "https://courier-api-sandbox.pathao.com/aladdin/api/v1/";
+
+const pathaoAxios = Axios.create({
+  baseURL: `${url}`,
+  headers: {
+    Authorization:
+      "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjRkMmQ5NGJlNjIxZGE0YjlkZWEzOWRiOWNlYTA4M2ZhOGY4YjdjMTI5MTNmMDYwYjRiZThiMjc1ZWZiOGMxOGI5Njc3YTM0N2IyNTIwNDJmIn0.eyJhdWQiOiIyNjciLCJqdGkiOiI0ZDJkOTRiZTYyMWRhNGI5ZGVhMzlkYjljZWEwODNmYThmOGI3YzEyOTEzZjA2MGI0YmU4YjI3NWVmYjhjMThiOTY3N2EzNDdiMjUyMDQyZiIsImlhdCI6MTcwNjQzMDk4OCwibmJmIjoxNzA2NDMwOTg4LCJleHAiOjE3MDY4NjI5ODgsInN1YiI6IjM1MiIsInNjb3BlcyI6W119.nFrNRmCKhIn_4N3Rtfdz1MuYop-ydV0zDFwjeIwlAUmvo58DfVRQ9ONX-fqWKVI9b1WJy553suUOv_3OI4fv_EnRbyPMXILGO5_v4Jt7YhZ8BgdnphivSxIklsErr1SXG0RnfCWnJgAQd6aOFTjQpejY1WwJBk9RgDoXWW5M6SzuH6bvSzjz7ZDGPE8aTtyEXbpyHVx0iA3jG0aqqOvT-Koa6W93QtMasDL2ZaE-Gt-S87Cl5_8VjO2HveEN2hv9SG4R1kabbYw90ooTTZartl5XQqJ9QRqBnVlbRwwq5KyXfNQLDPnTyvCQMJ7PgJoakyC_-_alucVgTgnuKqYkQXqYfUOEOSMNI1-gPh1n7IF1YN88eGFQ_gwENxMLCFnsa4X320oNEcHunfC3wLadIMY4e9hggR56KLhRe97nVE52v0738PwpMDIAXOTfvBxUa2lbbqroDOu-S4Q8jf202kv39_HteY_xzc_5ODgtvVfoeOmoi39DptYhUbxKVXnxt3zmByfjzmOYc1AY4TXsKrkQsIBJOKTLtKR6aFEvgeKpsne_hPOSzp1HtYBzP0Tao0uwZ0p2iAfunqNxg8ETN7rbS4kuXPOfA7oTVoiY0wxF7EET2SzOL-_FoPckCwOzrhy3EkJCcTqnC_zYr3Neui0N-qZZUus7XEXSFe83PF8",
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
+});
+
+module.exports = pathaoAxios;
