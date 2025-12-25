@@ -1106,6 +1106,16 @@
 
         const startTime = new Date(Date.now() - 72 * 60 * 60 * 1000);
         
+        // Ensure MongoDB connection is ready
+        if (mongoose.connection.readyState !== 1) {
+          console.error("❌ MongoDB connection not ready. State:", mongoose.connection.readyState);
+          return res.status(500).json({
+            data: null,
+            success: false,
+            message: "Database connection not ready. Please try again.",
+          });
+        }
+        
         // Handle both string and ObjectId productIds from frontend
         const selectedProductIds = req.body.products.map((i) => {
           if (!i?.productId) return null;
@@ -1136,6 +1146,15 @@
           .flat()
           .filter(id => id !== null);
 
+        // Only query products if we have product IDs
+        if (selectedProductIds.length === 0 && selectedComboProductIds.length === 0) {
+          return res.status(409).json({
+            data: null,
+            success: false,
+            message: "No valid product IDs found in request.",
+          });
+        }
+
         const [
           checkAllProducts,
           checkAllCombos,
@@ -1151,10 +1170,7 @@
               $match: {
                 $and: [
                   {
-                    $or: [
-                      { _id: { $in: [...selectedProductIds, ...selectedComboProductIds] } },
-                      { _id: { $in: [...selectedProductIds, ...selectedComboProductIds].map(id => String(id)) } },
-                    ],
+                    _id: { $in: [...selectedProductIds, ...selectedComboProductIds] },
                   },
                   { isDeleted: { $in: [false, "false", null] } },
                   { isOwnDisabled: { $in: [false, "false", null] } },
@@ -1196,7 +1212,7 @@
                 categories: 1,
               },
             },
-          ]),
+          ]).option({ allowDiskUse: true, maxTimeMS: 30000 }),
           ComboModel.find(
             {
               _id: { $in: req.body.combos.map((item) => ObjectId(item?.comboId)) },
@@ -1898,18 +1914,14 @@
         // Using findOneAndUpdate ensures proper session handling and better error reporting
         console.log("🔍 Preparing individual product updates (using findOneAndUpdate with session):");
         const productUpdatePromises = productBulkData.map(async (op, idx) => {
-          const productId = op.updateOne.filter._id;
+          // Use the ObjectId directly from bulk data (already validated)
+          const productIdObj = op.updateOne.filter._id;
           const update = op.updateOne.update;
           
-          // Ensure productId is ObjectId
-          let productIdObj;
-          try {
-            productIdObj = productId instanceof mongoose.Types.ObjectId 
-              ? productId 
-              : new mongoose.Types.ObjectId(String(productId));
-          } catch (err) {
-            console.error(`❌ Invalid productId for operation ${idx + 1}:`, err);
-            return { matched: 0, modified: 0, error: err.message };
+          // Verify it's an ObjectId
+          if (!(productIdObj instanceof mongoose.Types.ObjectId)) {
+            console.error(`❌ Invalid productId type for operation ${idx + 1}:`, typeof productIdObj);
+            return { matched: 0, modified: 0, error: 'Invalid productId type' };
           }
           
           console.log(`Updating product ${idx + 1}:`, {
@@ -1919,50 +1931,44 @@
           });
           
           try {
-            // CRITICAL FIX: Query product WITHOUT session first to verify it exists in DB
-            // This bypasses transaction isolation issues
-            const dbProductCheck = await ProductModel.findById(productIdObj).lean();
-            if (!dbProductCheck) {
-              console.error(`❌ Product ${idx + 1} NOT FOUND in database: ${String(productIdObj)}`);
-              return { matched: 0, modified: 0, error: 'Product not found in database' };
-            }
-            
-            // Log actual product state for debugging
-            console.log(`🔍 Product ${idx + 1} DB state:`, {
-              id: String(dbProductCheck._id),
-              name: dbProductCheck.name,
-              isDeleted: dbProductCheck.isDeleted,
-              isOwnDisabled: dbProductCheck.isOwnDisabled,
-              isActive: dbProductCheck.isActive,
-              stock: dbProductCheck.nonVariation?.stock,
-            });
-            
-            // Use updateOne WITHOUT session if transactions disabled, WITH session if enabled
+            // Use findByIdAndUpdate which is more reliable than updateOne
+            // This ensures we're using the exact same ObjectId instance
             const updateOptions = {
               runValidators: false,
+              new: false, // Return original document
               ...(session ? { session } : {}),
             };
             
-            const result = await ProductModel.updateOne(
-              { _id: productIdObj },
+            console.log(`🔍 Attempting update with findByIdAndUpdate:`, {
+              _id: String(productIdObj),
+              _idType: productIdObj instanceof mongoose.Types.ObjectId ? 'ObjectId' : typeof productIdObj,
+              updateKeys: Object.keys(update),
+            });
+            
+            // Use findByIdAndUpdate instead of updateOne for better reliability
+            const updatedProduct = await ProductModel.findByIdAndUpdate(
+              productIdObj,
               update,
               updateOptions
             );
             
-            const matched = result.matchedCount || 0;
-            const modified = result.modifiedCount || 0;
-            
-            if (matched > 0) {
-              console.log(`✅ Product ${idx + 1} updated successfully: ${String(productIdObj)} (matched: ${matched}, modified: ${modified})`);
-              return { matched, modified };
+            if (updatedProduct) {
+              console.log(`✅ Product ${idx + 1} updated successfully: ${String(productIdObj)}`);
+              return { matched: 1, modified: 1 };
             } else {
-              console.error(`❌ Product ${idx + 1} update matched 0: ${String(productIdObj)}`);
-              console.error(`Product exists but update didn't match. DB state:`, {
-                isDeleted: dbProductCheck.isDeleted,
-                isOwnDisabled: dbProductCheck.isOwnDisabled,
-                isActive: dbProductCheck.isActive,
+              // Query product to see why it didn't match
+              const dbProductCheck = await ProductModel.findById(productIdObj).lean();
+              console.error(`❌ Product ${idx + 1} update failed: ${String(productIdObj)}`);
+              console.error(`Product DB state:`, {
+                exists: !!dbProductCheck,
+                isDeleted: dbProductCheck?.isDeleted,
+                isOwnDisabled: dbProductCheck?.isOwnDisabled,
+                isActive: dbProductCheck?.isActive,
+                _id: dbProductCheck ? String(dbProductCheck._id) : 'N/A',
+                stock: dbProductCheck?.nonVariation?.stock,
               });
-              return { matched: 0, modified: 0, error: 'Update filter did not match' };
+              
+              return { matched: 0, modified: 0, error: 'Product not found or update failed' };
             }
           } catch (err) {
             console.error(`❌ Error updating product ${idx + 1} (${String(productIdObj)}):`, err);
@@ -2277,7 +2283,7 @@
         }
 
         // Commit transaction if active (only if using transactions)
-        if (session && session.inTransaction()) {
+        if (session && session.inTransaction && session.inTransaction()) {
           await session.commitTransaction();
           console.log("✅ Transaction committed successfully");
         } else if (!session) {
@@ -2322,7 +2328,13 @@
           )) {
             console.log("⚠️ MongoDB transactions require a replica set. Falling back to non-transaction mode.");
             console.log("   Set USE_TRANSACTIONS=false in .env to disable transactions for local dev.");
-            await session.endSession();
+            if (session) {
+              try {
+                await session.endSession();
+              } catch (sessionErr) {
+                console.log("Session end error (ignored):", sessionErr.message);
+              }
+            }
             // Retry without transaction
             return await executeOrderCreation();
           }
@@ -2333,23 +2345,30 @@
         return await executeOrderCreation();
       }
     } catch (err) {
-      console.log("*** adminCustomerOrderController: createAdminCustomerOrder ***");
-      console.log("ERROR:", err);
-      try {
-        if (session.inTransaction()) {
-          await session.abortTransaction();
+        console.log("*** adminCustomerOrderController: createAdminCustomerOrder ***");
+        console.log("ERROR:", err);
+        try {
+          if (session && session.inTransaction && session.inTransaction()) {
+            await session.abortTransaction();
+          }
+        } catch (abortErr) {
+          // Transaction already aborted or not started
+          console.log("Transaction abort error (ignored):", abortErr.message);
         }
-      } catch (abortErr) {
-        // Transaction already aborted or not started
-        console.log("Transaction abort error (ignored):", abortErr.message);
-      }
       return res.status(500).json({
         data: null,
         success: false,
         message: "Internal Server Error Occurred.",
       });
     } finally {
-      session.endSession();
+      // Only end session if it exists (transactions might be disabled)
+      if (session) {
+        try {
+          session.endSession();
+        } catch (sessionErr) {
+          console.log("Session end error (ignored):", sessionErr.message);
+        }
+      }
     }
   };
 
@@ -2667,23 +2686,30 @@
         return {};
       });
     } catch (err) {
-      console.log("*** adminCustomerOrderController: createAdminCustomerOrder ***");
-      console.log("ERROR:", err);
-      try {
-        if (session.inTransaction()) {
-          await session.abortTransaction();
+        console.log("*** adminCustomerOrderController: createAdminCustomerOrder ***");
+        console.log("ERROR:", err);
+        try {
+          if (session && session.inTransaction && session.inTransaction()) {
+            await session.abortTransaction();
+          }
+        } catch (abortErr) {
+          // Transaction already aborted or not started
+          console.log("Transaction abort error (ignored):", abortErr.message);
         }
-      } catch (abortErr) {
-        // Transaction already aborted or not started
-        console.log("Transaction abort error (ignored):", abortErr.message);
-      }
       return res.status(500).json({
         data: null,
         success: false,
         message: "Internal Server Error Occurred.",
       });
     } finally {
-      session.endSession();
+      // Only end session if it exists (transactions might be disabled)
+      if (session) {
+        try {
+          session.endSession();
+        } catch (sessionErr) {
+          console.log("Session end error (ignored):", sessionErr.message);
+        }
+      }
     }
   };
 

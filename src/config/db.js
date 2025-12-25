@@ -7,9 +7,13 @@ Mongoose.set("useCreateIndex", true);
 const db = async (app) => {
   try {
     const mongoOptions = {
-      poolSize: 2,
+      maxPoolSize: 10, // Increased from poolSize: 2
+      minPoolSize: 2,
       connectTimeoutMS: 50000,
-      // socketTimeoutMS: 60000,
+      socketTimeoutMS: 60000, // Uncommented and set
+      serverSelectionTimeoutMS: 50000,
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      bufferCommands: false, // Disable mongoose buffering
       tlsInsecure: true,
       useNewUrlParser: true,
       useUnifiedTopology: true,
