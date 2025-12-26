@@ -783,8 +783,13 @@ const viewProduct = async (req, res) => {
 const viewProductWithSimilarProduct = async (req, res) => {
   try {
     const LIMIT_OF_SIMILAR_PRODUCT = Math.max(1, req.query.similarLimit) || 1;
+    const productSlug = req.params.productSlug;
 
-    const [productData] = await ProductModel.aggregate([
+    console.log(
+      `[viewProductWithSimilarProduct] Fetching product with slug: ${productSlug}, similarLimit: ${LIMIT_OF_SIMILAR_PRODUCT}`
+    );
+
+    const productResults = await ProductModel.aggregate([
       {
         $match: {
           $and: [
@@ -793,7 +798,7 @@ const viewProductWithSimilarProduct = async (req, res) => {
               isDeleted: { $in: [false, "false", null] },
             },
             {
-              slug: { $eq: req.params.productSlug },
+              slug: { $eq: productSlug },
             },
           ],
         },
@@ -817,13 +822,53 @@ const viewProductWithSimilarProduct = async (req, res) => {
       },
     ]);
 
+    const [productData] = productResults;
+
     if (!productData) {
-      return res.status(400).json({
+      console.log(
+        `[viewProductWithSimilarProduct] Product not found for slug: ${productSlug}`
+      );
+      // Check if product exists but is deleted/disabled
+      const existingProduct = await ProductModel.findOne(
+        { slug: productSlug },
+        { _id: 1, slug: 1, isDeleted: 1, isOwnDisabled: 1 }
+      );
+
+      if (existingProduct) {
+        console.log(
+          `[viewProductWithSimilarProduct] Product exists but unavailable`,
+          {
+            slug: existingProduct.slug,
+            isDeleted: existingProduct.isDeleted,
+            isOwnDisabled: existingProduct.isOwnDisabled,
+          }
+        );
+      } else {
+        console.log(
+          `[viewProductWithSimilarProduct] No product found with slug: ${productSlug}`
+        );
+      }
+
+      return res.status(404).json({
         data: null,
-        message: "Failed to fetch product!",
+        message: existingProduct
+          ? "Product is disabled or deleted."
+          : "Product not found.",
         success: false,
+        meta: existingProduct
+          ? {
+              isDeleted: existingProduct.isDeleted,
+              isOwnDisabled: existingProduct.isOwnDisabled,
+            }
+          : null,
       });
     }
+
+    console.log(
+      `[viewProductWithSimilarProduct] Product found: ${
+        productData._id
+      } - ${productData.name || "N/A"}`
+    );
 
     let similarProducts = [];
     if (productData?.categories && productData?.categories.length > 0) {
