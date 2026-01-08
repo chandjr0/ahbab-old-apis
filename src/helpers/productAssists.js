@@ -820,27 +820,39 @@ const resellerCustomerProductFull = [
 const transformFlatFieldsToArrays = [
   {
     $addFields: {
-      // Transform categories flat fields to array
+      // Transform categories flat fields to array and convert strings to ObjectIds
       categories: {
         $cond: {
           if: { $isArray: "$categories" },
           then: "$categories",
           else: {
-            $filter: {
-              input: [
-                { $ifNull: [{ $getField: { field: "categories[0]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[1]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[2]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[3]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[4]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[5]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[6]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[7]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[8]", input: "$$ROOT" } }, null] },
-                { $ifNull: [{ $getField: { field: "categories[9]", input: "$$ROOT" } }, null] }
-              ],
-              as: "cat",
-              cond: { $and: [{ $ne: ["$$cat", ""] }, { $ne: ["$$cat", null] }, { $ne: ["$$cat", undefined] }] }
+            $map: {
+              input: {
+                $filter: {
+                  input: [
+                    { $ifNull: [{ $getField: { field: "categories[0]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[1]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[2]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[3]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[4]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[5]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[6]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[7]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[8]", input: "$$ROOT" } }, null] },
+                    { $ifNull: [{ $getField: { field: "categories[9]", input: "$$ROOT" } }, null] }
+                  ],
+                  as: "cat",
+                  cond: { $and: [{ $ne: ["$$cat", ""] }, { $ne: ["$$cat", null] }, { $ne: ["$$cat", undefined] }] }
+                }
+              },
+              as: "catId",
+              in: {
+                $cond: {
+                  if: { $eq: [{ $type: "$$catId" }, "string"] },
+                  then: { $toObjectId: "$$catId" },
+                  else: "$$catId"
+                }
+              }
             }
           }
         }

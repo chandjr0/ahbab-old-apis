@@ -872,6 +872,17 @@ const viewProductWithSimilarProduct = async (req, res) => {
 
     let similarProducts = [];
     if (productData?.categories && productData?.categories.length > 0) {
+      // After adminCustomerProductFull lookup, categories is an array of objects with {_id, name, slug}
+      // Extract the _id field from each category object
+      const categoryIds = productData.categories.map((cat) =>
+        cat?._id ? (typeof cat._id === 'string' ? ObjectId(cat._id) : cat._id) : cat
+      );
+
+      console.log(
+        `[viewProductWithSimilarProduct] Searching for similar products with categoryIds:`,
+        categoryIds.map(id => String(id))
+      );
+
       similarProducts = await ProductModel.aggregate([
         {
           $match: {
@@ -883,7 +894,7 @@ const viewProductWithSimilarProduct = async (req, res) => {
               {
                 slug: { $ne: req.params.productSlug },
               },
-              { categories: { $in: productData?.categories.map((i) => ObjectId(i?._id)) } },
+              { categories: { $in: categoryIds } },
             ],
           },
         },
